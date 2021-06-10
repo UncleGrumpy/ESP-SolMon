@@ -24,30 +24,27 @@
 // Copyright (c) 2021 Winford (Uncle Grumpy)
 //
 
+
+
 #include <Arduino.h>
 #include <Wire.h>
 #include<ADS1115_WE.h>
 #include <BMx280I2C.h>
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include <Hash.h>
+//#include <WiFiUdp.h>
+//#include <ArduinoOTA.h>
 #include <include/WiFiState.h>
 #include <coredecls.h>         // crc32()
-#include <ArduinoJson.h>
-#include "conf.h"             // create this file and #define SSID, PASSWORD, MQTT_IP... 
-                              // or comment out the above line and fill in below.
+#include "conf.h"    // IMPORTANT: copy conf.h.example to conf.h and edit.
 
-const char* ssid = SSID;
-const char* password = PASSWORD;
-const char* mqtt_server = MQTT_IP;
+const char* ssid = SSID;            // defined in conf.h
+const char* password = PASSWORD;    // defined in conf.h
+const char* mqtt_server = MQTT_IP;  // defined in conf.h
 
 #define BMP_ADDRESS 0x76
 #define ADC_ADDRESS 0x48
-#define SDA 2
-#define SCL 14
+//#define SDA 2
+//#define SCL 14
 
 //create an BMP280 object using the I2C interface
 BMx280I2C bmx280(BMP_ADDRESS);
@@ -56,7 +53,27 @@ BMx280I2C bmx280(BMP_ADDRESS);
 ADS1115_WE adc = ADS1115_WE(ADC_ADDRESS);
 
 WiFiClient espClient;
-PubSubClient client(espClient);
+
+#if defined(OUTPUT_HA)
+#include <ArduinoHA.h>
+// setup device instance
+HADevice device;
+HAMqtt mqtt(espClient, device);
+// define sensors/topics
+HASensor sm_run("runs");
+HASensor sm_vcc("Vcc");
+HASensor sm_time("Time-Awake");
+HASensor sm_bat("Battery-Voltage");
+HASensor sm_sol("Panel-Voltage");
+HASensor sm_wifi("WiFi-dB");
+HASensor sm_log("Log");
+HASensor sm_mbar("millibars");
+HASensor sm_mercury("inHg");
+HASensor sm_c("C");
+HASensor sm_f("F");
+HASensor sm_humid("Humidity");
+#endif
+
 float espVoltage;   //BAD global! this is my lazy way of reding the voltage before wifi is active
 ADC_MODE(ADC_VCC);
 
@@ -73,6 +90,12 @@ struct nv_s {     // this trick comes from the esp8268/LowPowerDemo example sket
 static nv_s* nv = (nv_s*)RTC_USER_MEM; // user RTC RAM area
 uint32_t resetCount = 0;  // keeps track of the number of Deep Sleep tests / resets
 
+//
+/*
+ * Results in:
+ *    $<base-topic>/sensors/$<device-UUID>/$<HASensor>/state
+ *    the "state" topic will contain the sensor value
+ */
 
 void setup() {
   resetCount = 0;
@@ -83,9 +106,9 @@ void setup() {
     resetCount = nv->rtcData.rstCount;  // read the previous reset count
     resetCount++;
   }
-  nv->rtcData.rstCount = resetCount; // update the reset count & CRC
+  nv->rtcData.rstCount = resetCount; // update the reset count and save to rtc
   updateRTCcrc();
-
+  
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -174,56 +197,82 @@ void setup() {
   // measute the internal voltage before we turn on wifi, it will be reported latter.
   espVoltage = ESP.getVcc();
 
+  #if defined(OUTPUT_HA)
+  // Unique ID must be set!
+  byte mac[WL_MAC_ADDR_LENGTH];
+  WiFi.macAddress(mac);
+  #endif
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(100);
-    Serial.print(".");
+    Serial.print("."); 
   }
+  
+  #if defined(OUTPUT_HA)
+  device.setUniqueId(mac, sizeof(mac));
+  // set device's details
+  device.setName("SolMon");
+  device.setSoftwareVersion(FW_VERSION);
+  device.setManufacturer(MANUFACTURER);
+  device.setModel(MODEL_NO);
+  // additional sensor parameters (optional)
+  sm_run.setName("Wakes without reset");
+  sm_run.setIcon("mdi:run");
+  sm_time.setName("Time Awake");
+  sm_time.setIcon("mdi:timer");
+  sm_time.setUnitOfMeasurement("ms");
+  sm_vcc.setName("SolMon Vcc");
+  sm_vcc.setIcon("mdi:current-dc");
+  sm_vcc.setDeviceClass("voltage");
+  sm_vcc.setUnitOfMeasurement("V");
+  sm_bat.setName("SolMon Battery");
+  sm_bat.setIcon("mdi:battery-plus");
+  sm_bat.setDeviceClass("voltage");
+  sm_bat.setUnitOfMeasurement("V"); 
+  sm_sol.setName("Solar Panel");
+  sm_sol.setIcon("mdi:solar-power");
+  sm_sol.setDeviceClass("voltage");
+  sm_sol.setUnitOfMeasurement("V");
+  sm_wifi.setName("ESP WiFi Signal");
+  sm_wifi.setIcon("mdi:wifi");
+  sm_wifi.setDeviceClass("signal_strength");
+  sm_wifi.setUnitOfMeasurement("dB");
+  sm_log.setName("SolMon Log");
+  sm_log.setIcon("mdi:file-alert");
+  sm_mercury.setName("Air Pressure");
+  sm_mercury.setIcon("mdi:gauge-low");
+  sm_mercury.setDeviceClass("pressure");
+  sm_mbar.setName("Outdoor Air Pressure");
+  sm_mbar.setIcon("mdi:gauge-low");
+  sm_mbar.setDeviceClass("pressure");
+  sm_mbar.setUnitOfMeasurement("mbar");
+  sm_c.setName("Outdoor Temperature");
+  sm_c.setIcon("mdi:thermometer");
+  sm_c.setDeviceClass("temperature");
+  sm_c.setUnitOfMeasurement("°C");
+  sm_f.setName("Outdoor Temperature");
+  sm_f.setIcon("mdi:thermometer");
+  sm_f.setDeviceClass("temperature");
+  sm_f.setUnitOfMeasurement("°F");
+  sm_humid.setName("Outdoor Humidity");
+  sm_humid.setIcon("mdi:gauge");
+  sm_humid.setDeviceClass("humidity");
+  sm_humid.setUnitOfMeasurement("%");
 
- client.setServer(mqtt_server, 1883);
+  mqtt.begin(mqtt_server);
+  #endif
 
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
+
+  mqtt.loop();
+  reportStatus();
   reportClimate();
-  reportPower();
   reportVoltage();
   digitalWrite(4, LOW);    // Power off peripherals.
   reportWaketime();        // report time spent awake.
   ESP.deepSleep(60e6);
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    char message[64];
-    char counter[9];
-    itoa ((int)resetCount,counter,10);
-    StaticJsonDocument<48> doc;
-    doc["count"] = counter;
-    serializeJson(doc, message);
-    Serial.println();
-    Serial.print("Connection to MQTT broker ");
-    // Attempt to connect
-    if (client.connect("SolMon")) {
-      Serial.println("established.");
-      // Once connected, publish an announcement...
-      while (!client.publish("SolMon/run", message, true)) {
-        delay(5);
-      }
-      Serial.print(F("\nReset count = "));
-      Serial.println(resetCount);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 1 second");
-      // Wait 1/2 second before retrying
-      delay(500);
-    }
-  }
 }
 
 float readChannel(ADS1115_MUX channel) {
@@ -238,19 +287,14 @@ float readChannel(ADS1115_MUX channel) {
 void reportClimate() {
   /* MEASURE MBP280 */
   float pascals = 0.0;
-  char message[24];
-  char value[12];
-  StaticJsonDocument<48> doc;
   
   //start a measurement
   if (!bmx280.measure())
   {
     Serial.println("could not start measurement, is a measurement already running?");
-    StaticJsonDocument<48> doc;
-    doc["ERROR"] = "BMx280 Failure.";
-    serializeJson(doc, message);
-    client.publish("SolMon/console", message, true);
-    return;
+    #if defined(OUTPUT_HA)
+    sm_log.setValue("BMx280 Failure.");
+    #endif  
   }
 
   //wait for the measurement to finish
@@ -267,122 +311,110 @@ void reportClimate() {
   // Publish to mqtt
   pascals = bmx280.getPressure64();
   float mbars = pascals / 100;
-  dtostrf(mbars, 7, 2, value);  // convert mbars to 7 character value[] - rounding at 2 decimal spaces (i.e. "1013.37")
-  doc.clear();
-  doc["mbars"] = value;
-  serializeJson(doc, message);
-  while (!client.publish("sensors/climate/outdoor/millibars", message, true)) {
-    delay(5);
-  }
+  #if defined(OUTPUT_HA)
+  sm_mbar.setValue(mbars);
+  #endif
+
   float inHg = mbars / 33.8639;
-  dtostrf(inHg, 5, 2, value);  // convert inHg to 5 character value[] - rounding at 2 decimal spaces (i.e. "29.37")
-  doc.clear();
-  doc["inHg"] = value;
-  serializeJson(doc, message);
-  while (!client.publish("sensors/climate/outdoor/inHg", message, true)) {
-    delay(5);
-  }
+  #if defined(OUTPUT_HA)
+  sm_mercury.setValue(inHg);
+  #endif
+
   float celsius = bmx280.getTemperature();
-  dtostrf(celsius, 5, 2, value);  // convert celsius to 5 character value[] - rounding at 2 decimal spaces (i.e. "48.00")
-  doc.clear();
-  doc["C"] = value;
-  serializeJson(doc, message);
-  while (!client.publish("sensors/climate/outdoor/temp/c", message, true)) {
-    delay(5);
-  }
+  #if defined(OUTPUT_HA)
+  sm_c.setValue(celsius);
+  #endif
+
   float tempF = (celsius * 1.8) + 32;
-  dtostrf(tempF, 5, 2, value);  // convert tempF to 6 character value[] - rounding at 2 decimal spaces (i.e. "100.00")
-  doc.clear();
-  doc["F"] = value;
-  serializeJson(doc, message);
-  while (!client.publish("sensors/climate/outdoor/temp/f", message, true)) {
-    delay(5);
-  }
+  #if defined(OUTPUT_HA)
+  sm_f.setValue(tempF);
+  #endif
 
   if (bmx280.isBME280())
   {
     float humid = bmx280.getHumidity();
-    dtostrf(humid, 5, 2, value);  // convert humid to 5 character value[] - rounding at 2 decimal spaces (i.e. "100.00")
-    doc.clear();
-    doc["percent"] = value;
-    serializeJson(doc, message);
     Serial.print("Humidity: ");
-    while (!client.publish("sensors/climate/outdoor/humidity", message, true)) {
-      delay(5);
-    }
+    #if defined(OUTPUT_HA)
+    sm_humid.setValue(humid);
+    #endif 
     Serial.println(humid);
   }
 }
 
-void reportPower() {
-  /* MEASURE ADS1115 */
-  float voltage = 0.0;
-  //float volts = 0.0;
-  char message[24];
-  char value[6];
+void reportStatus() {
+  static float BATvolts = (readChannel(ADS1115_COMP_0_GND) * 3.26);
+  static float SOLvolts = (readChannel(ADS1115_COMP_1_GND) * 4);
+  static float sigLevel = WiFi.RSSI();
+  static float INPUTvolts = ((espVoltage - 220) / 1000);
+  //char value[6];
+
+  //dtostrf(INPUTvolts, 4, 2, value);  // convert volts to 4 character value[] - rounding at 2 decimal spaces
+  //strcat(value, "\0");
+  Serial.print("ESP Vcc: ");
+  #if defined(OUTPUT_HA)
+  sm_vcc.setValue(INPUTvolts);
+  #endif 
+  Serial.print(INPUTvolts);
+  Serial.println(" volts");
+  
+  //uint32_t resetCount -- global
+  //BATvolts = (readChannel(ADS1115_COMP_0_GND) * 3.26);
+  //SOLvolts = (readChannel(ADS1115_COMP_1_GND) * 4);
+
+  Serial.print(F("\nReset count = "));
+  #if defined(OUTPUT_HA)
+  sm_run.setValue(resetCount);
+  #endif 
+  Serial.println(resetCount);
   
   Serial.print("Battery: ");
-  voltage = (readChannel(ADS1115_COMP_0_GND) * 3.26);
-  dtostrf(voltage, 4, 2, value);  // convert volts to 4 character value[] - rounding at 2 decimal spaces
-  StaticJsonDocument<48> doc;
-  doc["volts"] = value;
-  serializeJson(doc, message);
-  // Publish a message to mqtt
-  while (!client.publish("SolMon/battery", message, true)) {
-    delay(5);
-  }
-  Serial.println(value);
+  #if defined(OUTPUT_HA)
+  sm_bat.setValue(BATvolts);
+  #endif 
+  Serial.println(BATvolts);
 
   Serial.print("Panel:   ");
-  voltage = (readChannel(ADS1115_COMP_1_GND) * 4);
-  dtostrf(voltage, 4, 2, value);  // convert volts to 4 character value[] - rounding at 2 decimal spaces
-  doc.clear();
-  doc["volts"] = value;
-  serializeJson(doc, message);
-  // Publish a message to mqtt
-  while (!client.publish("SolMon/panel", message, true)) {
-    delay(5);
-  }
-  Serial.println(value);
+  #if defined(OUTPUT_HA)
+  sm_sol.setValue(SOLvolts);
+  #endif 
+  Serial.println(SOLvolts);
+
+  Serial.print("WiFi dB: ");
+  #if defined(OUTPUT_HA)
+  sm_wifi.setValue(sigLevel);
+  #endif 
+  Serial.println(sigLevel);
 }
 
-
 void reportVoltage() {            // read internal VCC
-  static float volts = ((espVoltage - 220) / 1000);
-  char message[24];
+  static float INPUTvolts = ((espVoltage - 220) / 1000);
   char value[6];
-  dtostrf(volts, 4, 2, value);  // convert volts to 4 character value[] - rounding at 2 decimal spaces
-  StaticJsonDocument<48> doc;
-  doc.clear();
-  doc["volts"] = value;
-  serializeJson(doc, message);
-  // Publish a message to mqtt
-  while (!client.publish("SolMon/vcc", message, true)) {
-    delay(5);
-  }
+  dtostrf(INPUTvolts, 4, 2, value);  // convert volts to 4 character value[] - rounding at 2 decimal spaces
   strcat(value, "\0");
   Serial.print("ESP Vcc: ");
+  #if defined(OUTPUT_HA)
+  sm_vcc.setValue(INPUTvolts);
+  #endif 
   Serial.print(value);
   Serial.println(" volts");
 }
 
 void reportWaketime() {
   Serial.print("Execution time = ");
+  #if defined(OUTPUT_HA)
+  int timer = millis();
+  sm_time.setValue(timer);
+  #endif
   Serial.println(millis());
   Serial.flush();
-  int wakeTime = millis();
-  char message[64];
-  char timer[9];
-  itoa ((int)wakeTime,timer,10);
-  StaticJsonDocument<48> doc;
-  doc["milliseconds"] = timer;
-  serializeJson(doc, message);
-  while (!client.publish("SolMon/duration", message, true)) {
-    delay(5);
-  }
-  client.disconnect();
 }
 
 void updateRTCcrc() {  // updates the reset count CRC
   nv->rtcData.crc32 = crc32((uint8_t*) &nv->rtcData.rstCount, sizeof(nv->rtcData.rstCount));
+}
+
+void onBeforeSwitchStateChanged(bool state, HASwitch* s)
+{
+    // this callback will be called before publishing new state to HA
+    // in some cases there may be delay before onStateChanged is called due to network latency
 }

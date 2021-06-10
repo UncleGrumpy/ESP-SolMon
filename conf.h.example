@@ -1,0 +1,17 @@
+// firmware configs.
+
+#define SDA 2
+#define SCL 14
+
+/* These are required */
+#define SSID "your-network-name"
+#define PASSWORD "wifi-password" 
+#define MQTT_IP "##.##.##.##"	// HOSTNAME will not work... =(
+// Enable at least one output below.
+#define OUTPUT_HA       // send data to mqtt broker formatted as home assistant device.
+//#define OUTPUT_INFLUX   // send data to InfluxDB server.
+
+/* these are all optional */
+#define DEVICE_NAME "SolMon"
+#define MANUFACTURER ""		// name of maker
+#define MODEL_NO ""		// hardware revision id
