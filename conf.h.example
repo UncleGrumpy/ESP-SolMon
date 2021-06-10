@@ -1,0 +1,23 @@
+// firmware configs.
+#define FW_VERSION "B-0-4.0"
+#define DEVICE_NAME "SolMon"
+#define MANUFACTURER ""
+#define MODEL_NO ""
+#define SDA 2
+#define SCL 14
+
+// Enable at least one output below.
+#define OUTPUT_HA       // send data to mqtt broker formatted as home assistant device.
+//#define OUTPUT_INFLUX   // send data to InfluxDB server.
+
+// Required for HomeAssistant
+#define SSID "wifi-network-name"
+#define PASSWORD "wifi-password"
+#define MQTT_IP "##.##.##.##"   // HOSTNAME will not work... =( 
+
+// Required for InfluxDB
+#define INFLUXDB_URL "http://HOST:8086" // full url with ip or hostname and port
+#define INFLUXDB_DB_NAME "sensors"	// name of the Influx database. MUST ALREADY EXIST!
+// Required if using athentification on InfluxDB
+#define INFLUXDB_USER "NAME"
+#define INFLUXDB_PASSWORD "PASSWORD"
