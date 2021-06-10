@@ -1,5 +1,5 @@
 // firmware configs.
-#define FW_VERSION ""
+#define FW_VERSION "B-0-4.0"
 #define DEVICE_NAME "SolMon"
 #define MANUFACTURER ""
 #define MODEL_NO ""
