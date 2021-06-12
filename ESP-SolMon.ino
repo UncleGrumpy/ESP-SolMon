@@ -278,7 +278,6 @@ void setup() {
   #if defined(OUTPUT_INFLUX)
   // Sensor parameters
   wifi_sensor.addTag("device", DEVICE_NAME);
-  wifi_sensor.addTag("manufaturer", MANUFACTURER);
   wifi_sensor.addTag("model", MODEL_NO);
   wifi_sensor.addTag("firmware", FW_VERSION);
   wifi_sensor.addTag("sensor", "WiFi");
@@ -286,27 +285,23 @@ void setup() {
   wifi_sensor.addTag("unit", "dB");
   wifi_sensor.addTag("location", "front yard");
   run_sensor.addTag("device", DEVICE_NAME);
-  run_sensor.addTag("manufaturer", MANUFACTURER);
   run_sensor.addTag("model", MODEL_NO);
   run_sensor.addTag("firmware", FW_VERSION);
   run_sensor.addTag("sensor", "wakeup_counter");
   run_sensor.addTag("type", "counter");
   vcc_sensor.addTag("device", DEVICE_NAME);
-  vcc_sensor.addTag("manufaturer", MANUFACTURER);
   vcc_sensor.addTag("model", MODEL_NO);
   vcc_sensor.addTag("firmware", FW_VERSION);
   vcc_sensor.addTag("sensor", "esp_adc");
   vcc_sensor.addTag("type", "internal_voltage");
   vcc_sensor.addTag("unit", "Volts");
   timer_sensor.addTag("device", DEVICE_NAME);
-  timer_sensor.addTag("manufaturer", MANUFACTURER);
   timer_sensor.addTag("model", MODEL_NO);
   timer_sensor.addTag("firmware", FW_VERSION);
   timer_sensor.addTag("sensor", "time_awake");
   timer_sensor.addTag("type", "timer");
   timer_sensor.addTag("unit", "milliseconds");
   battery_sensor.addTag("device", DEVICE_NAME);
-  battery_sensor.addTag("manufaturer", MANUFACTURER);
   battery_sensor.addTag("model", MODEL_NO);
   battery_sensor.addTag("firmware", FW_VERSION);
   battery_sensor.addTag("sensor", "ads1115-0");
@@ -314,7 +309,6 @@ void setup() {
   battery_sensor.addTag("unit", "Volts");
   battery_sensor.addTag("location", "front yard");
   panel_sensor.addTag("device", DEVICE_NAME);
-  panel_sensor.addTag("manufaturer", MANUFACTURER);
   panel_sensor.addTag("model", MODEL_NO);
   panel_sensor.addTag("firmware", FW_VERSION);
   panel_sensor.addTag("sensor", "ads1115-1");
@@ -322,12 +316,10 @@ void setup() {
   panel_sensor.addTag("unit", "Volts");
   panel_sensor.addTag("location", "front yard");
   log_sensor.addTag("device", DEVICE_NAME);
-  log_sensor.addTag("manufaturer", MANUFACTURER);
   log_sensor.addTag("model", MODEL_NO);
   log_sensor.addTag("firmware", FW_VERSION);
   log_sensor.addTag("type", "log");
   mbar_sensor.addTag("device", DEVICE_NAME);
-  mbar_sensor.addTag("manufaturer", MANUFACTURER);
   mbar_sensor.addTag("model", MODEL_NO);
   mbar_sensor.addTag("firmware", FW_VERSION);
   mbar_sensor.addTag("sensor", "bme280");
@@ -335,7 +327,6 @@ void setup() {
   mbar_sensor.addTag("unit", "millibars");
   mbar_sensor.addTag("location", "front yard");
   mercury_sensor.addTag("device", DEVICE_NAME);
-  mercury_sensor.addTag("manufaturer", MANUFACTURER);
   mercury_sensor.addTag("model", MODEL_NO);
   mercury_sensor.addTag("firmware", FW_VERSION);
   mercury_sensor.addTag("sensor", "bme280");
@@ -343,7 +334,6 @@ void setup() {
   mercury_sensor.addTag("unit", "in_Hg");
   mercury_sensor.addTag("location", "front yard");
   celsius_sensor.addTag("device", DEVICE_NAME);
-  celsius_sensor.addTag("manufaturer", MANUFACTURER);
   celsius_sensor.addTag("model", MODEL_NO);
   celsius_sensor.addTag("firmware", FW_VERSION);
   celsius_sensor.addTag("sensor", "bme280");
@@ -351,7 +341,6 @@ void setup() {
   celsius_sensor.addTag("unit", "C");
   celsius_sensor.addTag("location", "front yard");
   temp_sensor.addTag("device", DEVICE_NAME);
-  temp_sensor.addTag("manufaturer", MANUFACTURER);
   temp_sensor.addTag("model", MODEL_NO);
   temp_sensor.addTag("firmware", FW_VERSION);
   temp_sensor.addTag("sensor", "bme280");
@@ -359,7 +348,6 @@ void setup() {
   temp_sensor.addTag("unit", "F");
   temp_sensor.addTag("location", "front yard");
   humid_sensor.addTag("device", DEVICE_NAME);
-  humid_sensor.addTag("manufaturer", MANUFACTURER);
   humid_sensor.addTag("model", MODEL_NO);
   humid_sensor.addTag("firmware", FW_VERSION);
   humid_sensor.addTag("sensor", "bme280");
