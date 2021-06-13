@@ -24,8 +24,6 @@
 // Copyright (c) 2021 Winford (Uncle Grumpy)
 //
 
-
-
 #include <Arduino.h>
 #include <Wire.h>
 #include<ADS1115_WE.h>
@@ -37,16 +35,13 @@
 #include <coredecls.h>         // crc32()
 #include "conf.h"    // IMPORTANT: copy conf.h.example to conf.h and edit.
 
+
 const char* ssid = SSID;            // defined in conf.h
 const char* password = PASSWORD;    // defined in conf.h
 const char* mqtt_server = MQTT_IP;  // defined in conf.h
 
-#define BMP_ADDRESS 0x76
-#define ADC_ADDRESS 0x48
-
 //create an BMP280 object using the I2C interface
-BMx280I2C bmx280(BMP_ADDRESS);
-
+BMx280I2C bmx280(BME_ADDRESS);
 //create an ADS1115 object using the I2C interface
 ADS1115_WE adc = ADS1115_WE(ADC_ADDRESS);
 
@@ -76,22 +71,18 @@ HASensor sm_humid("Humidity");
 #include <InfluxDbClient.h>
 // InfluxDB client instance for InfluxDB 1
 InfluxDBClient client(INFLUXDB_URL, INFLUXDB_DB_NAME);
-/* Uncomment below to use InfluxDB 1 authentication */
+/* Uncomment below and to use InfluxDB 1 authentication, set influx user/pass in conf.h */
 //client.setConnectionParamsV1(INFLUXDB_URL, INFLUXDB_DB_NAME, INFLUXDB_USER, INFLUXDB_PASSWORD);
 
 // Data point
 Point wifi_sensor("wifi_signal");
 Point run_sensor("run_counter");
-Point vcc_sensor("internal_voltage");
 Point timer_sensor("time_awake");
-Point battery_sensor("battery_voltage");
-Point panel_sensor("panel_voltage");
+Point voltage_sensor("voltage");
 Point log_sensor("console_log");
-Point mbar_sensor("outdoor_millibars");
-Point mercury_sensor("inches_mercury");
-Point celsius_sensor("outdoor_celsius");
-Point temp_sensor("outdoor_fahrenheit");
-Point humid_sensor("outdoor_humidity");
+Point pressure_sensor("air_pressure");
+Point temp_sensor("temperature");
+Point humid_sensor("humidity");
 #endif
 
 float espVoltage;   //BAD global! this is my lazy way of reding the voltage before wifi is active
@@ -121,12 +112,15 @@ void setup() {
   }
   nv->rtcData.rstCount = resetCount; // update the reset count and save to rtc
   updateRTCcrc();
+
+  // measute the internal voltage before we turn on wifi, it will be reported latter.
+  espVoltage = ESP.getVcc();
   
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.println();
-  Serial.print("Connecting WiFi.");
+  Serial.print("Connecting WiFi");
 
   // Turn on power to sensors.
   pinMode(4, OUTPUT);       // base of 2N2222 peripheral power control.
@@ -179,10 +173,7 @@ void setup() {
   //adc.setCompareChannels(ADS1115_COMP_2_GND);   /* uncomment to enable */
   //adc.setCompareChannels(ADS1115_COMP_3_GND);   /* uncomment to enable */
 
-  /*
-   * Alert pin is NOT connected!!!
-   *    Do not enable it!!!
-   */
+  // Alert pin is NOT connected!!! Do not enable it!!!
   adc.setAlertPinMode(ADS1115_DISABLE_ALERT);
 
   /* Set the conversion rate in SPS (samples per second)
@@ -206,10 +197,6 @@ void setup() {
    */
   //adc.setMeasureMode(ADS1115_CONTINUOUS); //uncomment if you want to change the default
 
-  /* ESP ADC */
-  // measute the internal voltage before we turn on wifi, it will be reported latter.
-  espVoltage = ESP.getVcc();
-
   #if defined(OUTPUT_HA)
   // Unique ID must be set!
   byte mac[WL_MAC_ADDR_LENGTH];
@@ -217,9 +204,10 @@ void setup() {
   #endif  
   
   while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
+    delay(50);
     Serial.print("."); 
   }
+  Serial.println();
   
   #if defined(OUTPUT_HA)
   device.setUniqueId(mac, sizeof(mac));
@@ -278,78 +266,32 @@ void setup() {
   #if defined(OUTPUT_INFLUX)
   // Sensor parameters
   wifi_sensor.addTag("device", DEVICE_NAME);
-  wifi_sensor.addTag("model", MODEL_NO);
-  wifi_sensor.addTag("firmware", FW_VERSION);
-  wifi_sensor.addTag("sensor", "WiFi");
   wifi_sensor.addTag("type", "wifi_signal");
   wifi_sensor.addTag("unit", "dB");
   wifi_sensor.addTag("location", "front yard");
   run_sensor.addTag("device", DEVICE_NAME);
-  run_sensor.addTag("model", MODEL_NO);
-  run_sensor.addTag("firmware", FW_VERSION);
   run_sensor.addTag("sensor", "wakeup_counter");
   run_sensor.addTag("type", "counter");
-  vcc_sensor.addTag("device", DEVICE_NAME);
-  vcc_sensor.addTag("model", MODEL_NO);
-  vcc_sensor.addTag("firmware", FW_VERSION);
-  vcc_sensor.addTag("sensor", "esp_adc");
-  vcc_sensor.addTag("type", "internal_voltage");
-  vcc_sensor.addTag("unit", "Volts");
   timer_sensor.addTag("device", DEVICE_NAME);
-  timer_sensor.addTag("model", MODEL_NO);
-  timer_sensor.addTag("firmware", FW_VERSION);
-  timer_sensor.addTag("sensor", "time_awake");
   timer_sensor.addTag("type", "timer");
-  timer_sensor.addTag("unit", "milliseconds");
-  battery_sensor.addTag("device", DEVICE_NAME);
-  battery_sensor.addTag("model", MODEL_NO);
-  battery_sensor.addTag("firmware", FW_VERSION);
-  battery_sensor.addTag("sensor", "ads1115-0");
-  battery_sensor.addTag("type", "battery_voltage");
-  battery_sensor.addTag("unit", "Volts");
-  battery_sensor.addTag("location", "front yard");
-  panel_sensor.addTag("device", DEVICE_NAME);
-  panel_sensor.addTag("model", MODEL_NO);
-  panel_sensor.addTag("firmware", FW_VERSION);
-  panel_sensor.addTag("sensor", "ads1115-1");
-  panel_sensor.addTag("type", "panel_voltage");
-  panel_sensor.addTag("unit", "Volts");
-  panel_sensor.addTag("location", "front yard");
   log_sensor.addTag("device", DEVICE_NAME);
-  log_sensor.addTag("model", MODEL_NO);
-  log_sensor.addTag("firmware", FW_VERSION);
   log_sensor.addTag("type", "log");
-  mbar_sensor.addTag("device", DEVICE_NAME);
-  mbar_sensor.addTag("model", MODEL_NO);
-  mbar_sensor.addTag("firmware", FW_VERSION);
-  mbar_sensor.addTag("sensor", "bme280");
-  mbar_sensor.addTag("type", "air_pressure");
-  mbar_sensor.addTag("unit", "millibars");
-  mbar_sensor.addTag("location", "front yard");
-  mercury_sensor.addTag("device", DEVICE_NAME);
-  mercury_sensor.addTag("model", MODEL_NO);
-  mercury_sensor.addTag("firmware", FW_VERSION);
-  mercury_sensor.addTag("sensor", "bme280");
-  mercury_sensor.addTag("type", "air_pressure");
-  mercury_sensor.addTag("unit", "in_Hg");
-  mercury_sensor.addTag("location", "front yard");
-  celsius_sensor.addTag("device", DEVICE_NAME);
-  celsius_sensor.addTag("model", MODEL_NO);
-  celsius_sensor.addTag("firmware", FW_VERSION);
-  celsius_sensor.addTag("sensor", "bme280");
-  celsius_sensor.addTag("type", "temperature");
-  celsius_sensor.addTag("unit", "C");
-  celsius_sensor.addTag("location", "front yard");
+  voltage_sensor.addTag("device", DEVICE_NAME);
+  voltage_sensor.addTag("battery_sensor", "ads1115");
+  voltage_sensor.addTag("panel_sensor", "ads1115");
+  voltage_sensor.addTag("vcc_sensor", "esp_adc");
+  voltage_sensor.addTag("type", "adc_voltage");
+  voltage_sensor.addTag("unit", "Volts");
+  voltage_sensor.addTag("location", "front yard");
+  pressure_sensor.addTag("device", DEVICE_NAME);
+  pressure_sensor.addTag("sensor", "bme280");
+  pressure_sensor.addTag("type", "air_pressure");
+  pressure_sensor.addTag("location", "front yard");
   temp_sensor.addTag("device", DEVICE_NAME);
-  temp_sensor.addTag("model", MODEL_NO);
-  temp_sensor.addTag("firmware", FW_VERSION);
   temp_sensor.addTag("sensor", "bme280");
   temp_sensor.addTag("type", "temperature");
-  temp_sensor.addTag("unit", "F");
   temp_sensor.addTag("location", "front yard");
   humid_sensor.addTag("device", DEVICE_NAME);
-  humid_sensor.addTag("model", MODEL_NO);
-  humid_sensor.addTag("firmware", FW_VERSION);
   humid_sensor.addTag("sensor", "bme280");
   humid_sensor.addTag("type", "humidity");
   humid_sensor.addTag("unit", "%");
@@ -378,9 +320,7 @@ float readChannel(ADS1115_MUX channel) {
 }
 
 void reportClimate() {
-  /* MEASURE MBP280 */
-  float pascals = 0.0;
-  
+  /* MEASURE BME280 */
   //start a measurement
   if (!bmx280.measure())
   {
@@ -398,70 +338,51 @@ void reportClimate() {
     #endif
   }
 
-  //wait for the measurement to finish
-  //important: measurement data is read from the sensor in function hasValue() only.
-  //make sure to call get*() functions only after hasValue() has returned true.
+  // wait for the measurement to finish
+  // important: measurement data is read from the sensor in function hasValue() only.
+  // make sure to call get*() functions only after hasValue() has returned true.
   do
   {
     delay(5);
   } while (!bmx280.hasValue());
 
-  Serial.print("Pressure: "); Serial.println(bmx280.getPressure64());
-  Serial.print("Temperature: "); Serial.println(bmx280.getTemperature());
-
   // Publish to mqtt
+  float pascals = 0.0;
   pascals = bmx280.getPressure64();
   float mbars = pascals / 100;
-  #if defined(OUTPUT_HA)
-  sm_mbar.setValue(mbars);
-  #endif
-  #if defined(OUTPUT_INFLUX)
-  mbar_sensor.clearFields();
-  mbar_sensor.addField("value", mbars);
-  if (!client.writePoint(mbar_sensor)) {
-    Serial.print("InfluxDB write failed: ");
-    Serial.println(client.getLastErrorMessage());
-  }
-  #endif
-
   float inHg = mbars / 33.8639;
   #if defined(OUTPUT_HA)
+  sm_mbar.setValue(mbars);
   sm_mercury.setValue(inHg);
   #endif
   #if defined(OUTPUT_INFLUX)
-  mercury_sensor.clearFields();
-  mercury_sensor.addField("value",inHg );
-  if (!client.writePoint(mercury_sensor)) {
+  pressure_sensor.clearFields();
+  pressure_sensor.addField("millibars", mbars);
+  pressure_sensor.addField("pascals", pascals);
+  pressure_sensor.addField("inches_mercury",inHg );
+  if (!client.writePoint(pressure_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
   }
   #endif
+  Serial.print("Pressure: "); Serial.println(bmx280.getPressure64());
 
   float celsius = bmx280.getTemperature();
-  #if defined(OUTPUT_HA)
-  sm_c.setValue(celsius);
-  #endif
-  #if defined(OUTPUT_INFLUX)
-  celsius_sensor.clearFields();
-  celsius_sensor.addField("value", celsius);
-  if (!client.writePoint(celsius_sensor)) {
-    Serial.print("InfluxDB write failed: ");
-    Serial.println(client.getLastErrorMessage());
-  }
-  #endif
-
   float tempF = (celsius * 1.8) + 32;
   #if defined(OUTPUT_HA)
+  sm_c.setValue(celsius);
   sm_f.setValue(tempF);
   #endif
   #if defined(OUTPUT_INFLUX)
   temp_sensor.clearFields();
-  temp_sensor.addField("value", tempF);
+  temp_sensor.addField("outdoor_C", celsius);
+  temp_sensor.addField("outdoor_F", tempF);
   if (!client.writePoint(temp_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
   }
   #endif
+  Serial.print("Temperature: "); Serial.println(bmx280.getTemperature());
 
   if (bmx280.isBME280())
   {
@@ -473,38 +394,31 @@ void reportClimate() {
     Serial.println(humid);
     #if defined(OUTPUT_INFLUX)
     humid_sensor.clearFields();
-    humid_sensor.addField("value", humid);
+    humid_sensor.addField("outdoor_humidity", humid);
     if (!client.writePoint(humid_sensor)) {
       Serial.print("InfluxDB write failed: ");
       Serial.println(client.getLastErrorMessage());
     }
     #endif
 
+  } else {
+    Serial.println("could not measure humidity, is this a bmp280?");
+    #if defined(OUTPUT_HA)
+    sm_log.setValue("BMP: No humidity");
+    #endif
+    #if defined(OUTPUT_INFLUX)
+    log_sensor.clearFields();
+    log_sensor.addField("log", "BMP: No humidity");
+    if (!client.writePoint(log_sensor)) {
+      Serial.print("InfluxDB write failed: ");
+      Serial.println(client.getLastErrorMessage());
+    }
+    #endif
   }
 }
 
 void reportStatus() {
-  static float BATvolts = (readChannel(ADS1115_COMP_0_GND) * 3.26);
-  static float SOLvolts = (readChannel(ADS1115_COMP_1_GND) * 4);
-  static float sigLevel = WiFi.RSSI();
-  static float INPUTvolts = ((espVoltage - 220) / 1000);
-
-  Serial.print("ESP Vcc: ");
-  #if defined(OUTPUT_HA)
-  sm_vcc.setValue(INPUTvolts);
-  #endif
-  Serial.print(INPUTvolts);
-  Serial.println(" volts");
-  #if defined(OUTPUT_INFLUX)
-  vcc_sensor.clearFields();
-  vcc_sensor.addField("value", INPUTvolts);
-  if (!client.writePoint(vcc_sensor)) {
-    Serial.print("InfluxDB write failed: ");
-    Serial.println(client.getLastErrorMessage());
-  }
-  #endif
-
-
+  /* Report wake count */
   Serial.print(F("\nReset count = "));
   #if defined(OUTPUT_HA)
   sm_run.setValue(resetCount);
@@ -512,43 +426,40 @@ void reportStatus() {
   Serial.println(resetCount);
   #if defined(OUTPUT_INFLUX)
   run_sensor.clearFields();
-  run_sensor.addField("value", resetCount);
+  run_sensor.addField("wake_counter", resetCount);
   if (!client.writePoint(run_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
   }
   #endif
 
-  
-  Serial.print("Battery: ");
+  static float BATvolts = (readChannel(ADS1115_COMP_0_GND) * 3.26);
+  static float SOLvolts = (readChannel(ADS1115_COMP_1_GND) * 4);
+  static float sigLevel = WiFi.RSSI();
+  static float INPUTvolts = ((espVoltage - 220) / 1000);
+ 
+  Serial.print("ESP Vcc: ");
+  Serial.print(INPUTvolts);
+  Serial.println(" volts");
   #if defined(OUTPUT_HA)
+  sm_vcc.setValue(INPUTvolts);
   sm_bat.setValue(BATvolts);
-  #endif
-  Serial.println(BATvolts);
-  #if defined(OUTPUT_INFLUX)
-  battery_sensor.clearFields();
-  battery_sensor.addField("value", BATvolts);
-  if (!client.writePoint(battery_sensor)) {
-    Serial.print("InfluxDB write failed: ");
-    Serial.println(client.getLastErrorMessage());
-  }
-  #endif
-
-
-  Serial.print("Panel:   ");
-  #if defined(OUTPUT_HA)
   sm_sol.setValue(SOLvolts);
   #endif
-  Serial.println(SOLvolts);
   #if defined(OUTPUT_INFLUX)
-  panel_sensor.clearFields();
-  panel_sensor.addField("value", SOLvolts);
-  if (!client.writePoint(panel_sensor)) {
+  voltage_sensor.clearFields();
+  voltage_sensor.addField("SolMon_Vcc", INPUTvolts);
+  voltage_sensor.addField("SolMon_Battery", BATvolts);
+  voltage_sensor.addField("SolMon_Panel", SOLvolts);
+  if (!client.writePoint(voltage_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
   }
   #endif
-
+  Serial.print("Battery: ");
+  Serial.println(BATvolts);
+  Serial.print("Panel:   ");
+  Serial.println(SOLvolts);
 
   Serial.print("WiFi dB: ");
   #if defined(OUTPUT_HA)
@@ -557,7 +468,7 @@ void reportStatus() {
   Serial.println(sigLevel);
   #if defined(OUTPUT_INFLUX)
   wifi_sensor.clearFields();
-  wifi_sensor.addField("value", sigLevel);
+  wifi_sensor.addField("SolMon", sigLevel);
   if (!client.writePoint(wifi_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
@@ -573,7 +484,7 @@ void reportWaketime() {
   #endif
   #if defined(OUTPUT_INFLUX)
   timer_sensor.clearFields();
-  timer_sensor.addField("value", millis());
+  timer_sensor.addField("millisconds", millis());
   if (!client.writePoint(timer_sensor)) {
     Serial.print("InfluxDB write failed: ");
     Serial.println(client.getLastErrorMessage());
