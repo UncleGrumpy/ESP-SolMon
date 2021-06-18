@@ -188,7 +188,7 @@ void setup() {
    *  ADS1115_475_SPS
    *  ADS1115_860_SPS
    */
-  adc.setConvRate(ADS1115_860_SPS); //uncomment if you want to change the default
+  adc.setConvRate(ADS1115_8_SPS); //uncomment if you want to change the default
 
   /* Set continuous or single shot mode:
    *
