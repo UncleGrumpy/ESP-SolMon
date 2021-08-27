@@ -26,16 +26,12 @@
 // Copyright (c) 2021 Winford (Uncle Grumpy)
 //
 
-#include <Arduino.h>
 #include <LittleFS.h>
 #include <Wire.h>
 #include <ADS1115_WE.h>
 #include <BMx280I2C.h>
 #include <BH1750.h>
 #include <ESP8266WiFi.h>
-//#include <WiFiUdp.h>
-//#include <ArduinoOTA.h>
-//#include <include/WiFiState.h>
 #include <coredecls.h>         // crc32()
 #include "conf.h"    // IMPORTANT: copy conf.h.example to conf.h and edit.
 
@@ -53,7 +49,7 @@ BH1750 luxMeter;
 WiFiClient espClient;
 
 ADC_MODE(ADC_VCC);
-static float espVoltage = ESP.getVcc();   //BAD global! this is my way of reading the voltage before wifi is active
+static float espVoltage = ESP.getVcc() - 218;   //BAD global! this is my way of reading the voltage before wifi is active
 // NOTE: The subtratction of 218 is to correct for a value that always mesures ~218mV above the true value on my ESP-12F.
 // This is a known flaw of the esp8266 when measuring the input voltage with the internal ADC.
 // Each module is different, but the good news is, that however wrong it is the ammount stays consistent. You can
@@ -67,7 +63,6 @@ struct nv_s {     // this trick borrowed from the esp8268/LowPowerDemo example s
     uint32_t noWifi;     // stores the number of consecutive missed connections
     uint32_t channel;    // stores the wifi channel for faster no-scan connetion
     uint32_t bssid[6];   // stores mac address of AP for fast no-san connection
-    //uint32_t crc;       // crc of rtcData
   } rtcData;
 };
 
@@ -122,15 +117,14 @@ void setup() {
   Serial.begin(74880);  // Native Serial speed for ESP12-F so we can get boot messages too.
   delay(250);
   Serial.println();
-  delay(50);
+  delay(1);
   Serial.println("boot time (ms): " + setupStart);
   delay(1);
   bool useRTC;
   String resetCause = ESP.getResetReason();
   Serial.println(resetCause);
   delay(1);
-  // Read previous resets (Deep Sleeps) from RTC memory, if any
-  //bool goodCRC = rtcValid();
+  // Read previous data from RTC memory, if any
   if ((rtcValid()) && (resetCause == "Deep-Sleep Wake")) {
     resetCount = nv->rtcData.rstCount;  // read the previous reset count
     resetCount++;
@@ -158,11 +152,13 @@ void setup() {
     
   if (!LittleFS.begin()) {
     Serial.println("Unable to start filesystem. Formatting.");
+    delay(1);
     LittleFS.format();
-    delay(100);
+    delay(200);
     Serial.println("Done. Retrying to start LittleFS.");
     if (!LittleFS.begin()) {
       Serial.println("Unable to start filesystem. Giving up. Good Luck!");
+      delay(1);
     }
   }
 
@@ -399,10 +395,10 @@ void loop() {
   reportClimate();
   digitalWrite(4, LOW);    // Power off peripherals.
   reportWaketime();        // report time spent awake.
-  delay(50);
-  WiFi.disconnect( true );
-  delay( 1 );
-  WiFi.mode( WIFI_OFF );
+  delay(100);
+  WiFi.disconnect(true);
+  delay(1);
+  WiFi.mode(WIFI_OFF);
   ESP.deepSleep(60e6, RF_DISABLED);
   delay(1);
 }
@@ -583,7 +579,6 @@ void reportLux() {
     Serial.print("lux: ");
     while (!luxMeter.measurementReady(true)) {
       delay(1);
-      //Serial.print("#");
     }
     float lux = luxMeter.readLightLevel();
 
@@ -625,15 +620,18 @@ void reportStatus() {
   static float BATvolts = (readChannel(ADS1115_COMP_0_GND) * 3.26);
   static float SOLvolts = (readChannel(ADS1115_COMP_1_GND) * 4);
   static float sigLevel = WiFi.RSSI();
-  static float INPUTvolts = (espVoltage / 1024.00f );
+  static float INPUTvolts = (espVoltage / 1024.00f);
 
   Serial.print("ESP Vcc: ");
   Serial.print(INPUTvolts);
   Serial.println(" volts");
 #if defined(OUTPUT_HA)
   sm_vcc.setValue(INPUTvolts);
+  delay(5);
   sm_bat.setValue(BATvolts);
+  delay(5);
   sm_sol.setValue(SOLvolts);
+  delay(5);
 #endif
 #if defined(OUTPUT_INFLUX)
   voltage_sensor.clearFields();
@@ -663,6 +661,7 @@ void reportStatus() {
     Serial.println(client.getLastErrorMessage());
   }
 #endif
+  delay(1);
 }
 
 void reportWaketime() {
@@ -687,7 +686,6 @@ void reportWaketime() {
 #endif
   Serial.println(millis());
   Serial.flush();
-  WiFi.disconnect(true);
   delay(1);
 }
 
@@ -793,7 +791,7 @@ uint32_t WiFiInit( bool rtcOK ) {
   WiFi.forceSleepWake();
   delay(1);
   WiFi.mode(WIFI_STA);
-  //WiFi.setOutputPower(10);
+  WiFi.setOutputPower(10);
   WiFi.persistent(false);   // Dont's save WiFiState to flash we will store it in RTC RAM later.
   WiFi.config(staticIP, gateway, subnet);
   if ((rtcOK) && (wifiMissed == 0)) {
@@ -807,7 +805,7 @@ uint32_t WiFiInit( bool rtcOK ) {
     for (int mem = 0; mem < 6; mem++ ) {
       Serial.print(wifiID[mem], HEX);
     }
-     //Serial.println();
+     Serial.println();
   } else { 
     Serial.print("rtcOK = ");
     Serial.println(rtcOK);
@@ -843,9 +841,9 @@ void WiFiTimeout(uint32_t wifiTime) {
     Serial.println(err);
     updateRTCcrc();
     delay(5);
-    WiFi.disconnect( true );
+    WiFi.disconnect(true);
     delay( 1 );
-    WiFi.mode( WIFI_OFF );
+    WiFi.mode(WIFI_OFF);
     ESP.deepSleep(60e6, RF_DISABLED);    // Try again in 60 seconds.
   } else {
     Serial.println();
